@@ -8,6 +8,7 @@ the only thing that changes here is SOURCE. The rest of the app keeps working.
 Author: Nicolas Perez + Claude
 Last updated: 2026-04-21
 """
+import tempfile
 from pathlib import Path
 
 # ---------------------------------------------------------------------------
@@ -30,6 +31,12 @@ SOURCE = "local_xlsx"
 PROJECT_ROOT = Path(__file__).resolve().parent
 DATA_DIR = PROJECT_ROOT / "data"
 LOCAL_XLSX_PATH = DATA_DIR / "unified_dataset.xlsx"
+
+# Fallback: when the dataset is not shipped with the repo (public deploy,
+# PII-sensitive data) the user uploads it via the UI. Streamlit Cloud's
+# container filesystem is writable under /tmp; on local Windows/macOS this
+# resolves to the OS temp dir. Persists until the container restarts.
+UPLOADED_XLSX_PATH = Path(tempfile.gettempdir()) / "he_ops_uploaded_dataset.xlsx"
 
 # ---------------------------------------------------------------------------
 # Funnel definition — the 5 events agreed with Thom (Apr 20, 2026).

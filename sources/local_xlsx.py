@@ -10,19 +10,34 @@ from datetime import datetime
 
 import pandas as pd
 
-from config import LOCAL_XLSX_PATH
+from config import LOCAL_XLSX_PATH, UPLOADED_XLSX_PATH
 from sources.base import BaseSource, RawTables
+
+
+def _resolve_path():
+    """Return the first existing path out of: bundled data/, then /tmp upload.
+
+    This lets the same adapter work in two modes:
+      - local dev: the full xlsx lives at ./data/unified_dataset.xlsx
+      - public deploy: the xlsx is PII-sensitive and not in the repo; the user
+        uploads it through the UI (app.py) which writes it to UPLOADED_XLSX_PATH.
+    """
+    for candidate in (LOCAL_XLSX_PATH, UPLOADED_XLSX_PATH):
+        if candidate.exists():
+            return candidate
+    return None
 
 
 class Source(BaseSource):
     name = "local_xlsx"
 
     def load(self) -> RawTables:
-        path = LOCAL_XLSX_PATH
-        if not path.exists():
+        path = _resolve_path()
+        if path is None:
             raise FileNotFoundError(
-                f"Expected dataset at {path}. "
-                "Re-generate with build_unified.py or copy it into data/."
+                f"Expected dataset at {LOCAL_XLSX_PATH} or {UPLOADED_XLSX_PATH}. "
+                "Re-generate with build_unified.py and copy into data/, or upload "
+                "via the dashboard UI."
             )
 
         # errors='coerce' on timestamps protects us from occasional bad rows
@@ -44,7 +59,9 @@ class Source(BaseSource):
         )
 
     def freshness(self) -> str:
-        if not LOCAL_XLSX_PATH.exists():
+        path = _resolve_path()
+        if path is None:
             return "missing"
-        mtime = datetime.fromtimestamp(LOCAL_XLSX_PATH.stat().st_mtime)
-        return f"local file, last modified {mtime:%Y-%m-%d %H:%M}"
+        mtime = datetime.fromtimestamp(path.stat().st_mtime)
+        suffix = " (uploaded)" if path == UPLOADED_XLSX_PATH else ""
+        return f"local file{suffix}, last modified {mtime:%Y-%m-%d %H:%M}"

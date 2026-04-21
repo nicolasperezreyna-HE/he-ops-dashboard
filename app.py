@@ -15,7 +15,7 @@ That's the seam that protects the front when Dimitri's source of truth lands.
 """
 import streamlit as st
 
-from config import APP_ICON, APP_TITLE, DATA_CACHE_TTL_SECONDS
+from config import APP_ICON, APP_TITLE, DATA_CACHE_TTL_SECONDS, UPLOADED_XLSX_PATH
 from transform.unified import DashboardData, load_data
 from views import compare, monitor, optimize
 
@@ -31,6 +31,33 @@ def _cached_load() -> DashboardData:
     return load_data()
 
 
+def _render_upload_gate() -> None:
+    """Fallback UI when no dataset is available.
+
+    The public repo intentionally does NOT ship the unified xlsx (it contains
+    expert PII). First time the app boots on Streamlit Cloud, the user uploads
+    the xlsx here. It's written to the container's temp dir and picked up by
+    the local_xlsx adapter. Persists until the container restarts (typically
+    after ~15min of inactivity), then the user re-uploads.
+    """
+    st.warning(
+        "No dataset is loaded yet. Upload `unified_dataset.xlsx` to get started — "
+        "the file stays in this app's memory, it is not committed anywhere."
+    )
+    uploaded = st.file_uploader(
+        "Upload unified_dataset.xlsx",
+        type=["xlsx"],
+        help="The output of build_unified.py. Expected sheets: "
+             "fct_events, dim_expert, dim_project, dim_training.",
+    )
+    if uploaded is not None:
+        UPLOADED_XLSX_PATH.parent.mkdir(parents=True, exist_ok=True)
+        UPLOADED_XLSX_PATH.write_bytes(uploaded.getvalue())
+        st.cache_data.clear()
+        st.success("Dataset uploaded. Reloading...")
+        st.rerun()
+
+
 def main() -> None:
     st.title(APP_TITLE)
     st.caption(
@@ -38,7 +65,11 @@ def main() -> None:
         "Data model: 5-event funnel agreed with Thom (Apr 20, 2026)."
     )
 
-    data = _cached_load()
+    try:
+        data = _cached_load()
+    except FileNotFoundError:
+        _render_upload_gate()
+        return
 
     tab_monitor, tab_optimize, tab_compare, tab_about = st.tabs([
         "Monitor", "Optimize", "Compare", "About",
